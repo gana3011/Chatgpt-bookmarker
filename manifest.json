@@ -1,0 +1,17 @@
+{
+  "manifest_version": 2,
+  "name": "ChatGPT Bookmarker - Final",
+  "version": "1.2",
+  "description": "Bookmark and navigate to ChatGPT messages using stable message IDs.",
+  "permissions": ["storage", "activeTab", "tabs"],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "ChatGPT Bookmarks"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
