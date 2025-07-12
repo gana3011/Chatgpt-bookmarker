@@ -1,19 +1,47 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const list = document.getElementById('bookmarkList');
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("clearAllBtn").onclick = () => {
+    if (confirm("Are you sure you want to delete all bookmarks?")) {
+      chrome.storage.local.set({ chatgptBookmarks: [] }, () => {
+        document.getElementById("bookmarkList").innerHTML =
+          "<li>No bookmarks yet.</li>";
+      });
+    }
+  };
+
+  const list = document.getElementById("bookmarkList");
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     chrome.storage.local.get({ chatgptBookmarks: [] }, (data) => {
-  const bookmarks = data.chatgptBookmarks;
-        list.innerHTML = '';
+      const bookmarks = data.chatgptBookmarks;
+      list.innerHTML = "";
 
-        bookmarks.forEach((bookmark) => {
-          const li = document.createElement('li');
-          li.textContent = bookmark.preview;
+      bookmarks.forEach((bookmark) => {
+        const li = document.createElement("li");
+        li.textContent = bookmark.preview;
 
-          const btn = document.createElement('button');
-          btn.textContent = 'Go';
-          btn.onclick = () => {
-            chrome.tabs.query({ url: bookmark.url }, (existingTabs) => {
-              const scrollScript = `
+        li.textContent = bookmark.preview;
+
+        const goBtn = document.createElement("button");
+        goBtn.textContent = "Go";
+        goBtn.style.marginLeft = "10px";
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Clear";
+        deleteBtn.style.marginLeft = "10px";
+        deleteBtn.onclick = () => {
+          const newBookmarks = bookmarks.filter(
+            (b) => b.id !== bookmark.id || b.url !== bookmark.url
+          );
+          chrome.storage.local.set({ chatgptBookmarks: newBookmarks }, () => {
+            li.remove();
+            if (newBookmarks.length === 0) {
+              list.innerHTML = "<li>No bookmarks yet.</li>";
+            }
+          });
+        };
+
+        goBtn.onclick = () => {
+          chrome.tabs.query({ url: bookmark.url }, (existingTabs) => {
+            const scrollScript = `
                 function findAndScrollToMessage(messageId, attempts = 0) {
                   const el = document.querySelector('[data-message-id="' + messageId + '"]');
                   if (el) {
@@ -30,31 +58,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 findAndScrollToMessage("${bookmark.id}");
               `;
 
-              if (existingTabs.length > 0) {
-                chrome.tabs.update(existingTabs[0].id, { active: true });
-                chrome.tabs.executeScript(existingTabs[0].id, { code: scrollScript });
-              } else {
-                chrome.tabs.create({ url: bookmark.url }, (newTab) => {
-                  chrome.tabs.onUpdated.addListener(function waitForLoad(tabId, info) {
-                    if (tabId === newTab.id && info.status === 'complete') {
-                      chrome.tabs.onUpdated.removeListener(waitForLoad);
-                      chrome.tabs.executeScript(newTab.id, { code: scrollScript });
-                    }
-                  });
+            if (existingTabs.length > 0) {
+              chrome.tabs.update(existingTabs[0].id, { active: true });
+              chrome.tabs.executeScript(existingTabs[0].id, {
+                code: scrollScript,
+              });
+            } else {
+              chrome.tabs.create({ url: bookmark.url }, (newTab) => {
+                chrome.tabs.onUpdated.addListener(function waitForLoad(
+                  tabId,
+                  info
+                ) {
+                  if (tabId === newTab.id && info.status === "complete") {
+                    chrome.tabs.onUpdated.removeListener(waitForLoad);
+                    chrome.tabs.executeScript(newTab.id, {
+                      code: scrollScript,
+                    });
+                  }
                 });
-              }
-            });
-          };
+              });
+            }
+          });
+        };
 
-          li.appendChild(btn);
-          list.appendChild(li);
-        });
+        li.appendChild(goBtn);
+        li.appendChild(deleteBtn);
+        list.appendChild(li);
+      });
 
-        if (bookmarks.length === 0) {
-          list.innerHTML = '<li>No bookmarks yet.</li>';
-        }
+      if (bookmarks.length === 0) {
+        list.innerHTML = "<li>No bookmarks yet.</li>";
       }
-    );
+    });
   });
 });
-
