@@ -1,11 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('bookmarkList');
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.executeScript(
-      tabs[0].id,
-      { code: 'localStorage.getItem("chatgptBookmarks")' },
-      (results) => {
-        const bookmarks = JSON.parse(results[0] || '[]');
+    chrome.storage.local.get({ chatgptBookmarks: [] }, (data) => {
+  const bookmarks = data.chatgptBookmarks;
         list.innerHTML = '';
 
         bookmarks.forEach((bookmark) => {
@@ -15,26 +12,39 @@ document.addEventListener('DOMContentLoaded', () => {
           const btn = document.createElement('button');
           btn.textContent = 'Go';
           btn.onclick = () => {
-  chrome.tabs.executeScript(tabs[0].id, {
-    code: `
-      function findAndScrollToMessage(messageId, attempts = 0) {
-        const el = document.querySelector('[data-message-id="' + messageId + '"]');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.style.outline = '3px solid gold';
-          setTimeout(() => el.style.outline = '', 3000);
-        } else if (attempts < 20) {
-          window.scrollBy(0, 200); // Try loading more of the page
-          setTimeout(() => findAndScrollToMessage(messageId, attempts + 1), 300);
-        } else {
-          alert("Message not found after trying. Scroll manually to load more of the conversation.");
-        }
-      }
-      findAndScrollToMessage("${bookmark.id}");
-    `
-  });
-};
+            chrome.tabs.query({ url: bookmark.url }, (existingTabs) => {
+              const scrollScript = `
+                function findAndScrollToMessage(messageId, attempts = 0) {
+                  const el = document.querySelector('[data-message-id="' + messageId + '"]');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.outline = '3px solid gold';
+                    setTimeout(() => el.style.outline = '', 3000);
+                  } else if (attempts < 20) {
+                    window.scrollBy(0, 200);
+                    setTimeout(() => findAndScrollToMessage(messageId, attempts + 1), 300);
+                  } else {
+                    alert("Message not found after trying.");
+                  }
+                }
+                findAndScrollToMessage("${bookmark.id}");
+              `;
 
+              if (existingTabs.length > 0) {
+                chrome.tabs.update(existingTabs[0].id, { active: true });
+                chrome.tabs.executeScript(existingTabs[0].id, { code: scrollScript });
+              } else {
+                chrome.tabs.create({ url: bookmark.url }, (newTab) => {
+                  chrome.tabs.onUpdated.addListener(function waitForLoad(tabId, info) {
+                    if (tabId === newTab.id && info.status === 'complete') {
+                      chrome.tabs.onUpdated.removeListener(waitForLoad);
+                      chrome.tabs.executeScript(newTab.id, { code: scrollScript });
+                    }
+                  });
+                });
+              }
+            });
+          };
 
           li.appendChild(btn);
           list.appendChild(li);
@@ -47,3 +57,4 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   });
 });
+

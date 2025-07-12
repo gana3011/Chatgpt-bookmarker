@@ -16,9 +16,15 @@ function addBookmarkButtons() {
     btn.onclick = () => {
       const preview = block.innerText.slice(0, 200);
       const bookmarks = JSON.parse(localStorage.getItem('chatgptBookmarks') || '[]');
-      bookmarks.push({ id: messageId, preview });
-      localStorage.setItem('chatgptBookmarks', JSON.stringify(bookmarks));
-      alert('Bookmarked!');
+      const chatUrl = window.location.href;
+     chrome.storage.local.get({ chatgptBookmarks: [] }, (data) => {
+  const bookmarks = data.chatgptBookmarks;
+  bookmarks.push({ id: messageId, preview, url: chatUrl });
+  chrome.storage.local.set({ chatgptBookmarks: bookmarks }, () => {
+    alert("Bookmarked!");
+  });
+});
+
     };
 
     block.appendChild(btn);
