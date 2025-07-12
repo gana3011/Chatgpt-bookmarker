@@ -75,8 +75,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const clearImg = document.createElement("img");
         clearImg.src = chrome.runtime.getURL('assets/clear.svg');
         clearImg.className = 'clear-img';
-        clearImg.style.height = '15px';
-        clearImg.style.width = '15px';
+        clearImg.style.height = '16px';
+        clearImg.style.width = '16px';
         clearImg.alt = "Clear";
         clearImg.style.marginLeft = "10px";
         clearImg.onclick = () => {

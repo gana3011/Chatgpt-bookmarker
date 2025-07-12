@@ -6,6 +6,7 @@ function addBookmarkButtons() {
   messages.forEach((block) => {
     const messageId = block.getAttribute('data-message-id');
     if (!messageId || block.querySelector('.bookmark-img')) return;
+    
 
     const img = document.createElement('img');
     img.src = chrome.runtime.getURL('assets/bookmark.svg');;
