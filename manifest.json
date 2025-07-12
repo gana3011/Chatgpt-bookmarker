@@ -13,5 +13,8 @@
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
       "js": ["content.js"]
     }
+  ],
+  "web_accessible_resources" : [
+      "assets/bookmark.svg"
   ]
 }

@@ -5,16 +5,19 @@ function addBookmarkButtons() {
 
   messages.forEach((block) => {
     const messageId = block.getAttribute('data-message-id');
-    if (!messageId || block.querySelector('.bookmark-btn')) return;
+    if (!messageId || block.querySelector('.bookmark-img')) return;
 
-    const btn = document.createElement('button');
-    btn.textContent = '🔖 Bookmark';
-    btn.className = 'bookmark-btn';
-    btn.style.margin = '10px';
-    btn.style.cursor = 'pointer';
+    const img = document.createElement('img');
+    img.src = chrome.runtime.getURL('assets/bookmark.svg');;
+    img.className = 'bookmark-img';
+    img.style.margin = '10px';
+    img.style.height = '16px';
+    img.style.width = '16px';
+    img.alt = 'Bookmark icon';
+    img.style.cursor = 'pointer';
 
-    btn.onclick = () => {
-      const preview = block.innerText.slice(0, 200);
+    img.onclick = () => {
+      const preview = block.innerText.slice(0,100);
       const bookmarks = JSON.parse(localStorage.getItem('chatgptBookmarks') || '[]');
       const chatUrl = window.location.href;
      chrome.storage.local.get({ chatgptBookmarks: [] }, (data) => {
@@ -27,7 +30,7 @@ function addBookmarkButtons() {
 
     };
 
-    block.appendChild(btn);
+    block.appendChild(img);
   });
 }
 
