@@ -1,49 +1,178 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const list = document.getElementById('bookmarkList');
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.tabs.executeScript(
-      tabs[0].id,
-      { code: 'localStorage.getItem("chatgptBookmarks")' },
-      (results) => {
-        const bookmarks = JSON.parse(results[0] || '[]');
-        list.innerHTML = '';
+// Polyfill for Firefox/Chrome API differences
+if (typeof browser === "undefined") {
+  var browser = chrome;
+}
 
-        bookmarks.forEach((bookmark) => {
-          const li = document.createElement('li');
-          li.textContent = bookmark.preview;
-
-          const btn = document.createElement('button');
-          btn.textContent = 'Go';
-          btn.onclick = () => {
-  chrome.tabs.executeScript(tabs[0].id, {
-    code: `
-      function findAndScrollToMessage(messageId, attempts = 0) {
-        const el = document.querySelector('[data-message-id="' + messageId + '"]');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.style.outline = '3px solid gold';
-          setTimeout(() => el.style.outline = '', 3000);
-        } else if (attempts < 20) {
-          window.scrollBy(0, 200); // Try loading more of the page
-          setTimeout(() => findAndScrollToMessage(messageId, attempts + 1), 300);
-        } else {
-          alert("Message not found after trying. Scroll manually to load more of the conversation.");
+async function getThemeFromPage() {
+  return new Promise((resolve) => {
+    browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]) return resolve("light");
+      browser.tabs.sendMessage(
+        tabs[0].id,
+        { action: "getTheme" },
+        (response) => {
+          if (browser.runtime.lastError || !response) {
+            browser.storage.local.get("chatgptTheme", (data) => {
+              resolve(data.chatgptTheme || "light");
+            });
+          } else {
+            resolve(response.theme);
+          }
         }
-      }
-      findAndScrollToMessage("${bookmark.id}");
-    `
+      );
+    });
   });
-};
+}
 
+function applyThemeToPopup(theme) {
+  const body = document.body;
+  if (theme === "dark") {
+    body.style.backgroundColor = "#202123";
+    body.style.color = "#ECECF1";
+  } else {
+    body.style.backgroundColor = "#FFFFFF";
+    body.style.color = "#202123";
+  }
+}
 
-          li.appendChild(btn);
-          list.appendChild(li);
-        });
+function updateBookmarkIcons(theme) {
+  const iconPath =
+    theme === "dark" ? "assets/bookmark-dark.svg" : "assets/bookmark-light.svg";
+  document.querySelectorAll(".bookmark-img").forEach((img) => {
+    img.src = browser.runtime.getURL(iconPath);
+  });
+}
 
-        if (bookmarks.length === 0) {
-          list.innerHTML = '<li>No bookmarks yet.</li>';
-        }
+document.addEventListener("DOMContentLoaded", async () => {
+  let theme = await getThemeFromPage();
+  applyThemeToPopup(theme);
+  updateBookmarkIcons(theme);
+
+  const list = document.getElementById("bookmarkList");
+
+  // Clear All Bookmarks
+  document.getElementById("clearAllBtn").onclick = () => {
+    if (confirm("Are you sure you want to delete all bookmarks?")) {
+      browser.storage.local.set({ chatgptBookmarks: [] }, () => {
+        list.innerHTML = "<li>No bookmarks yet.</li>";
+      });
+    }
+  };
+
+  // Detect theme changes
+  browser.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "local" && changes.chatgptTheme) {
+      theme = changes.chatgptTheme.newValue;
+      updateBookmarkIcons(theme);
+    }
+  });
+
+  browser.tabs.query({ active: true, currentWindow: true }, () => {
+    browser.storage.local.get({ chatgptBookmarks: [] }, (data) => {
+      const bookmarks = data.chatgptBookmarks;
+      list.innerHTML = "";
+
+      if (bookmarks.length === 0) {
+        list.innerHTML = "<li>No bookmarks yet.</li>";
+        return;
       }
-    );
+
+      bookmarks.forEach((bookmark) => {
+        const li = document.createElement("li");
+        li.textContent = bookmark.preview;
+
+        li.style.cursor = "pointer";
+        li.style.padding = "8px";
+        li.style.borderRadius = "6px";
+        li.style.transition = "background-color 0.2s ease";
+        li.style.display = "flex";
+        li.style.justifyContent = "space-between";
+        li.style.alignItems = "center";
+
+        li.onmouseenter = () =>
+          (li.style.backgroundColor = theme === "dark" ? "#2f303a" : "#F0F0F0");
+        li.onmouseleave = () => (li.style.backgroundColor = "");
+
+        li.onclick = (e) => {
+          if (e.target.tagName.toLowerCase() === "button") return; // ignore clear btn
+
+          browser.tabs.query({ url: bookmark.url }, (existingTabs) => {
+            if (existingTabs.length > 0) {
+              browser.tabs.update(existingTabs[0].id, { active: true });
+
+              // ✅ Cross-browser script injection
+              const code = `
+                (function(messageId){
+                  function findAndScrollToMessage(messageId, attempts = 0) {
+                    if (attempts === 0 && document.readyState !== 'complete') {
+                      setTimeout(() => findAndScrollToMessage(messageId, 0), 500);
+                      return;
+                    }
+                    const el = document.querySelector('[data-message-id="' + messageId + '"]');
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } else if (attempts < 50) {
+                      window.scrollBy(0, 300);
+                      setTimeout(() => findAndScrollToMessage(messageId, attempts + 1), 500);
+                    } else {
+                      if (attempts === 50) {
+                        window.scrollTo(0, 0);
+                        setTimeout(() => findAndScrollToMessage(messageId, 51), 1000);
+                      } else if (attempts < 100) {
+                        window.scrollBy(0, 200);
+                        setTimeout(() => findAndScrollToMessage(messageId, attempts + 1), 300);
+                      } else {
+                        alert("Message not found. The conversation might have been modified or the message may no longer exist.");
+                      }
+                    }
+                  }
+                  setTimeout(() => findAndScrollToMessage(messageId), 100);
+                })("${bookmark.id}");
+              `;
+
+              browser.tabs.executeScript(existingTabs[0].id, { code });
+            } else {
+              browser.storage.local.set(
+                {
+                  pendingScroll: {
+                    messageId: bookmark.id,
+                    url: bookmark.url,
+                    timestamp: Date.now(),
+                  },
+                },
+                () => {
+                  browser.tabs.create({ url: bookmark.url });
+                }
+              );
+            }
+          });
+        };
+
+        // Clear button
+        const clearImg = document.createElement("img");
+        const iconPath =
+          theme === "dark" ? "assets/clear-dark.svg" : "assets/clear-light.svg";
+        clearImg.src = chrome.runtime.getURL(iconPath);
+        clearImg.className = "clear-img";
+        clearImg.style.height = "16px";
+        clearImg.style.width = "16px";
+        clearImg.alt = "Clear";
+        clearImg.style.marginLeft = "10px";
+        clearImg.onclick = () => {
+          const newBookmarks = bookmarks.filter(
+            (b) => b.id !== bookmark.id || b.url !== bookmark.url
+          );
+          browser.storage.local.set({ chatgptBookmarks: newBookmarks }, () => {
+            li.remove();
+            if (newBookmarks.length === 0) {
+              list.innerHTML = "<li>No bookmarks yet.</li>";
+            }
+          });
+        };
+
+        li.appendChild(clearImg);
+        list.appendChild(li);
+      });
+    });
   });
 });
